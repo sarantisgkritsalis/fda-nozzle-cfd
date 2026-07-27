@@ -1,0 +1,15 @@
+# OpenFOAM run artifacts
+processor*/
+*.foam
+log.*
+*.log
+postprocessing/*
+!postprocessing/.gitkeep
+
+# Time directories generated during a run (keep only 0/)
+[1-9]*/
+[1-9]*.[0-9]*/
+
+# OS/editor cruft
+.DS_Store
+*.swp
