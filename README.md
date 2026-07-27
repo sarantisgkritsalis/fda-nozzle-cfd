@@ -51,7 +51,60 @@ plots/           Generated plots comparing CFD results against experimental
                  PIV/velocity data
 ```
 
-## Status
+## Current Status & Future Work
 
-Skeleton only — mesh, boundary conditions, and solver setup are not yet
-populated.
+Mesh, boundary conditions, and a first solver run are in place:
+
+- **Mesh**: coarse `blockMesh` background + `snappyHexMesh` (castellate +
+  snap, no boundary layers yet) around `constant/triSurface/fda_nozzle_wall.stl`.
+  8560 cells. `checkMesh` reports `Mesh OK` (max non-orthogonality 41.3°,
+  max skewness 0.6).
+- **Fluid**: blood-analog Newtonian fluid from Hariharan et al. 2011
+  (rho = 1056 kg/m^3, nu = 3.314394e-06 m^2/s), see
+  `constant/transportProperties`.
+- **Case run**: throat Re = 6500 (fully turbulent case), steady RANS with
+  `simpleFoam` + kOmegaSST (`constant/turbulenceProperties`). Inlet/outlet
+  velocities derived from Re via mass conservation
+  (U_throat = 5.386 m/s, U_inlet = 0.598 m/s); see the comments in `0/U`,
+  `0/k`, `0/omega` for the exact derivation.
+
+### Known limitations of this run (not yet resolved)
+
+- **Residuals did not fully converge.** `U` residuals drop quickly early on
+  then plateau around ~0.05 instead of continuing down to the
+  `residualControl` targets in `system/fvSolution`, with intermittent
+  "bounding k" events. This is consistent with a known feature of the FDA
+  nozzle benchmark at this Reynolds number reported in the literature: the
+  shear layer downstream of the sudden expansion sheds vortices and is
+  inherently unsteady, which a steady-state RANS solver cannot fully settle
+  into a single fixed point. It is not necessarily a sign of a mesh or
+  boundary-condition error.
+- **y+ on `nozzleWall` averages ~11.5** (min 0.78, max 47.7) — because no
+  boundary layers have been added yet (`snappyHexMeshDict` has
+  `addLayers false`), much of the wall sits in the buffer region rather
+  than solidly above y+ = 30, where the wall functions (`kqRWallFunction`,
+  `omegaWallFunction`, `nutkWallFunction`) are formally valid.
+- **Practical consequence**: wall shear stress from this run should be
+  treated as **indicative only, not quantitatively validated** — this
+  matters directly for `hemolysis-calculator`, which consumes shear stress
+  as its primary input. Do not feed this run's shear stress into the
+  haemolysis model as a validated result yet.
+
+### Next steps
+
+1. **Boundary layers**: enable `addLayers true` in `system/snappyHexMeshDict`
+   (with tuned `nSurfaceLayers` / `finalLayerThickness`) so `nozzleWall` sits
+   consistently above y+ = 30 (or move to a low-Re wall treatment targeting
+   y+ ~ 1), so wall shear stress can be trusted quantitatively.
+2. **Transient solver**: re-run with `pimpleFoam` to capture the unsteady
+   shear-layer / vortex-shedding behaviour downstream of the sudden
+   expansion directly, instead of relying on a steady RANS plateau.
+3. **`hemolysis-calculator` hand-off**: once (1) and (2) give a
+   quantitatively trustworthy shear stress field, add an export step that
+   writes velocity + shear stress history along streamlines in the format
+   `hemolysis-calculator` expects, and wire it into that project's
+   haemolysis model as validated input.
+4. **Post-processing script**: add the script (populating `postprocessing/`
+   and `plots/`) that extracts velocity profiles at the benchmark's PIV
+   measurement planes and plots them against the published experimental
+   data, closing the loop described in "Purpose" above.

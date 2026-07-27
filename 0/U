@@ -9,49 +9,39 @@ FoamFile
 {
     version     2.0;
     format      ascii;
-    class       dictionary;
-    object      fvSolution;
+    class       volVectorField;
+    object      U;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-solvers
+// Inlet bulk velocity for throat Re = 6500 (D_throat = 4 mm,
+// nu = 3.314394e-06 m^2/s -- see constant/transportProperties):
+//   U_throat = Re*nu/D_throat = 5.38589 m/s
+//   U_inlet  = U_throat * (D_throat/D_pipe)^2 = U_throat/9 = 0.598432 m/s
+// (mass conservation, D_pipe = 12 mm). Flow is along +z (see blockMeshDict).
+
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (0 0 0.598432);
+
+boundaryField
 {
-    p
+    inlet
     {
-        solver          GAMG;
-        tolerance       1e-06;
-        relTol          0.1;
-        smoother        GaussSeidel;
+        type            fixedValue;
+        value           uniform (0 0 0.598432);
     }
 
-    "(U|k|omega)"
+    outlet
     {
-        solver          smoothSolver;
-        smoother        symGaussSeidel;
-        tolerance       1e-05;
-        relTol          0.1;
+        type            inletOutlet;
+        inletValue      uniform (0 0 0);
+        value           uniform (0 0 0.598432);
     }
-}
 
-SIMPLE
-{
-    nNonOrthogonalCorrectors 1;
-    consistent      yes;
-
-    residualControl
+    nozzleWall
     {
-        p               1e-3;
-        U               1e-4;
-        "(k|omega)"     1e-4;
-    }
-}
-
-relaxationFactors
-{
-    equations
-    {
-        U               0.9;
-        ".*"            0.9;
+        type            noSlip;
     }
 }
 

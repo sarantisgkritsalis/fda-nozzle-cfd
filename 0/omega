@@ -9,49 +9,39 @@ FoamFile
 {
     version     2.0;
     format      ascii;
-    class       dictionary;
-    object      fvSolution;
+    class       volScalarField;
+    object      omega;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-solvers
+// Mixing-length estimate at the inlet (pipe diameter D_pipe = 12 mm):
+//   l     = 0.07*D_pipe = 8.4e-04 m
+//   omega = sqrt(k) / (Cmu^0.25 * l) = 79.65 1/s
+// with k = 1.34295e-03 m^2/s^2 (see 0/k) and Cmu = 0.09.
+
+dimensions      [0 0 -1 0 0 0 0];
+
+internalField   uniform 79.65;
+
+boundaryField
 {
-    p
+    inlet
     {
-        solver          GAMG;
-        tolerance       1e-06;
-        relTol          0.1;
-        smoother        GaussSeidel;
+        type            fixedValue;
+        value           uniform 79.65;
     }
 
-    "(U|k|omega)"
+    outlet
     {
-        solver          smoothSolver;
-        smoother        symGaussSeidel;
-        tolerance       1e-05;
-        relTol          0.1;
+        type            inletOutlet;
+        inletValue      uniform 79.65;
+        value           uniform 79.65;
     }
-}
 
-SIMPLE
-{
-    nNonOrthogonalCorrectors 1;
-    consistent      yes;
-
-    residualControl
+    nozzleWall
     {
-        p               1e-3;
-        U               1e-4;
-        "(k|omega)"     1e-4;
-    }
-}
-
-relaxationFactors
-{
-    equations
-    {
-        U               0.9;
-        ".*"            0.9;
+        type            omegaWallFunction;
+        value           uniform 79.65;
     }
 }
 

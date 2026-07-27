@@ -6,6 +6,13 @@ log.*
 postprocessing/*
 !postprocessing/.gitkeep
 
+# OpenFOAM's own function-object output dir (capital P) -- distinct from
+# the hand-curated postprocessing/ (lowercase) described in the README
+postProcessing/
+
+# ParaView state written next to the case if a session is saved there
+VTK/
+
 # Time directories generated during a run (keep only 0/)
 [1-9]*/
 [1-9]*.[0-9]*/

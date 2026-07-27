@@ -10,50 +10,25 @@ FoamFile
     version     2.0;
     format      ascii;
     class       dictionary;
-    object      fvSolution;
+    object      transportProperties;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-solvers
-{
-    p
-    {
-        solver          GAMG;
-        tolerance       1e-06;
-        relTol          0.1;
-        smoother        GaussSeidel;
-    }
+// Blood-analog Newtonian fluid used in the Hariharan et al. 2011 FDA nozzle
+// PIV experiments: rho = 1056 kg/m^3, mu = 3.5 cP = 0.0035 Pa.s.
+// simpleFoam is incompressible and only needs the kinematic viscosity;
+// rho is recorded here (and in the density comment) for post-processing
+// dimensionalization (e.g. converting kinematic to dynamic shear stress
+// before export to hemolysis-calculator).
 
-    "(U|k|omega)"
-    {
-        solver          smoothSolver;
-        smoother        symGaussSeidel;
-        tolerance       1e-05;
-        relTol          0.1;
-    }
-}
+transportModel  Newtonian;
 
-SIMPLE
-{
-    nNonOrthogonalCorrectors 1;
-    consistent      yes;
+// nu = mu / rho = 0.0035 / 1056
+nu              3.314394e-06;
 
-    residualControl
-    {
-        p               1e-3;
-        U               1e-4;
-        "(k|omega)"     1e-4;
-    }
-}
-
-relaxationFactors
-{
-    equations
-    {
-        U               0.9;
-        ".*"            0.9;
-    }
-}
+// rho [kg/m^3] -- for reference / post-processing only, not used by the
+// incompressible solver.
+rho             1056;
 
 
 // ************************************************************************* //

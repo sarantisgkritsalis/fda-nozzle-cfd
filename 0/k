@@ -9,49 +9,39 @@ FoamFile
 {
     version     2.0;
     format      ascii;
-    class       dictionary;
-    object      fvSolution;
+    class       volScalarField;
+    object      k;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-solvers
+// No turbulence intensity was measured/reported for the inlet in Hariharan
+// et al. 2011 -- this uses a generic 5% intensity assumption for
+// fully-developed pipe flow (I=0.05, U_inlet=0.598432 m/s):
+//   k = 1.5*(I*U_inlet)^2 = 1.34295e-03 m^2/s^2
+
+dimensions      [0 2 -2 0 0 0 0];
+
+internalField   uniform 1.34295e-03;
+
+boundaryField
 {
-    p
+    inlet
     {
-        solver          GAMG;
-        tolerance       1e-06;
-        relTol          0.1;
-        smoother        GaussSeidel;
+        type            fixedValue;
+        value           uniform 1.34295e-03;
     }
 
-    "(U|k|omega)"
+    outlet
     {
-        solver          smoothSolver;
-        smoother        symGaussSeidel;
-        tolerance       1e-05;
-        relTol          0.1;
+        type            inletOutlet;
+        inletValue      uniform 1.34295e-03;
+        value           uniform 1.34295e-03;
     }
-}
 
-SIMPLE
-{
-    nNonOrthogonalCorrectors 1;
-    consistent      yes;
-
-    residualControl
+    nozzleWall
     {
-        p               1e-3;
-        U               1e-4;
-        "(k|omega)"     1e-4;
-    }
-}
-
-relaxationFactors
-{
-    equations
-    {
-        U               0.9;
-        ".*"            0.9;
+        type            kqRWallFunction;
+        value           uniform 1.34295e-03;
     }
 }
 
