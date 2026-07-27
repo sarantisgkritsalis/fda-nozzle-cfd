@@ -10,6 +10,12 @@ postprocessing/*
 [1-9]*/
 [1-9]*.[0-9]*/
 
+# Generated mesh (reproducible from system/*Dict + the STL -- see README)
+constant/polyMesh/*
+!constant/polyMesh/.gitkeep
+constant/extendedFeatureEdgeMesh/
+constant/triSurface/*.eMesh
+
 # OS/editor cruft
 .DS_Store
 *.swp
