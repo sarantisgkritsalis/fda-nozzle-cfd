@@ -37,6 +37,24 @@ Any changes to mesh resolution, turbulence model, or solver settings here
 that affect the exported shear stress fields should be considered together
 with their downstream impact on `hemolysis-calculator` results.
 
+## Dependencies
+
+- **OpenFOAM v2312** (or a compatible OpenFOAM.com release) — provides
+  `blockMesh`, `snappyHexMesh`, `checkMesh`, `simpleFoam` used to build the
+  mesh and run the case.
+- **ParaView 6.x with `pvpython`** — only needed to regenerate the images in
+  `plots/` via `pvpython scripts/render_cfd_results.py`; not required to
+  build the mesh or run the solver.
+- **Python 3** (standard library only, no pip packages) — for
+  `scripts/generate_nozzle_geometry.py`, which regenerates
+  `constant/triSurface/fda_nozzle_wall.stl` from the published dimensions
+  (see `constant/triSurface/SOURCES.md`).
+
+There is no `requirements.txt` because nothing here is installed via pip:
+`generate_nozzle_geometry.py` has no external dependencies, and
+`render_cfd_results.py` runs inside ParaView's own bundled Python
+(`pvpython`), not a separate virtualenv.
+
 ## Case structure
 
 ```
