@@ -68,6 +68,27 @@ Mesh, boundary conditions, and a first solver run are in place:
   (U_throat = 5.386 m/s, U_inlet = 0.598 m/s); see the comments in `0/U`,
   `0/k`, `0/omega` for the exact derivation.
 
+### Results (t=1000, throat Re=6500)
+
+Rendered with `scripts/render_cfd_results.py` (pvpython); regenerate after
+any new run with `pvpython scripts/render_cfd_results.py`.
+
+**Velocity magnitude, axial slice** — acceleration through the throat,
+diffusion after the sudden expansion:
+![Velocity magnitude axial slice](plots/velocity_magnitude_axial_slice.png)
+
+**Pressure, axial slice** — pressure drop through the contraction, partial
+recovery downstream:
+![Pressure axial slice](plots/pressure_axial_slice.png)
+
+**Streamlines** — seeded across the inlet diameter, colored by velocity
+magnitude, shown over the wall outline:
+![Streamlines colored by velocity magnitude](plots/streamlines_velocity.png)
+
+**y+ on `nozzleWall`** — see the known limitation below (no boundary layers
+yet, so most of the wall sits below y+ = 30):
+![y+ on nozzleWall](plots/yplus_nozzle_wall.png)
+
 ### Known limitations of this run (not yet resolved)
 
 - **Residuals did not fully converge.** `U` residuals drop quickly early on
