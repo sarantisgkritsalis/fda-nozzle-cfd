@@ -14,10 +14,12 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-// Coarse first-pass mesh: castellate + snap only, no boundary layers yet.
+// Coarse first-pass mesh: castellate + snap + boundary layers on nozzleWall,
+// sized to target y+ ~ 30 at the throat (highest wall shear, smallest local
+// medial-axis distance -- see addLayersControls below).
 castellatedMesh true;
 snap            true;
-addLayers       false;
+addLayers       true;
 
 geometry
 {
@@ -86,9 +88,27 @@ addLayersControls
     relativeSizes   true;
     layers
     {
+        nozzleWall
+        {
+            nSurfaceLayers 3;
+        }
     }
-    expansionRatio          1.0;
-    finalLayerThickness     0.3;
+
+    // Sized off the throat: local surface cell size there is ~1 mm (background
+    // 2 mm, refinement level 1), and the throat friction velocity at throat
+    // Re = 6500 (see 0/U) gives y+ = 30 at ~0.28 mm wall distance. So a first
+    // layer at 0.3x the local cell size lands right at y+ ~ 30 in the throat.
+    // Kept to 3 layers (not more) because the throat is only 4 mm in
+    // diameter -- maxThicknessToMedialRatio below caps total layer stack at
+    // 30% of local wall-to-centerline distance (~0.6 mm at the throat), so a
+    // taller stack would just get squeezed back down by snappyHexMesh anyway.
+    // Away from the throat (larger pipe, lower shear) the same absolute
+    // first-layer thickness gives a smaller y+ -- that's expected and
+    // checked in the next step, not something this mesh alone can fix
+    // everywhere given the flow separation downstream of the sudden
+    // expansion.
+    firstLayerThickness    0.3;
+    expansionRatio          1.2;
     minThickness            0.1;
     nGrow                   0;
     featureAngle            60;
