@@ -6,6 +6,8 @@ goal of validating simulated flow fields against real experimental
 velocimetry data (PIV / LDA velocity measurements) published for this
 benchmark.
 
+![FDA nozzle wall geometry](plots/geometry_nozzle_wall.png)
+
 ## Purpose
 
 The FDA nozzle is a well-known round-robin CFD validation case for medical
@@ -43,7 +45,10 @@ with their downstream impact on `hemolysis-calculator` results.
   `blockMesh`, `snappyHexMesh`, `checkMesh`, `simpleFoam` used to build the
   mesh and run the case.
 - **ParaView 6.x with `pvpython`** — only needed to regenerate the images in
-  `plots/` via `pvpython scripts/render_cfd_results.py`; not required to
+  `plots/`, via `pvpython scripts/render_cfd_results.py` (solved fields;
+  needs a completed `simpleFoam` run) and/or
+  `pvpython scripts/render_mesh_geometry.py` (geometry/mesh only, works
+  right after `blockMesh`/`snappyHexMesh`, no solve needed); not required to
   build the mesh or run the solver.
 - **Python 3** (standard library only, no pip packages) — for
   `scripts/generate_nozzle_geometry.py`, which regenerates
@@ -73,10 +78,17 @@ plots/           Generated plots comparing CFD results against experimental
 
 Mesh, boundary conditions, and a first solver run are in place:
 
-- **Mesh**: coarse `blockMesh` background + `snappyHexMesh` (castellate +
-  snap, no boundary layers yet) around `constant/triSurface/fda_nozzle_wall.stl`.
-  8560 cells. `checkMesh` reports `Mesh OK` (max non-orthogonality 41.3°,
-  max skewness 0.6).
+- **Mesh**: coarse `blockMesh` background + `snappyHexMesh` (castellate,
+  snap, and boundary layers on `nozzleWall`) around
+  `constant/triSurface/fda_nozzle_wall.stl`. 19944 cells. `checkMesh`
+  reports `Mesh OK` (max non-orthogonality 45.7°, max skewness 1.04, max
+  aspect ratio 11.7). Boundary layers: 3 target layers on `nozzleWall`,
+  sized off the throat (`system/snappyHexMeshDict`); snappyHexMesh achieved
+  96% face coverage, avg 2.79 layers, 88% of target thickness (the throat's
+  4 mm diameter caps how thick a layer stack fits there).
+
+![Nozzle mesh overview](plots/mesh_overview.png)
+![Boundary-layer mesh at the throat](plots/mesh_throat_boundary_layers.png)
 - **Fluid**: blood-analog Newtonian fluid from Hariharan et al. 2011
   (rho = 1056 kg/m^3, nu = 3.314394e-06 m^2/s), see
   `constant/transportProperties`.
@@ -131,10 +143,13 @@ yet, so most of the wall sits below y+ = 30):
 
 ### Next steps
 
-1. **Boundary layers**: enable `addLayers true` in `system/snappyHexMeshDict`
-   (with tuned `nSurfaceLayers` / `finalLayerThickness`) so `nozzleWall` sits
-   consistently above y+ = 30 (or move to a low-Re wall treatment targeting
-   y+ ~ 1), so wall shear stress can be trusted quantitatively.
+1. **Boundary layers** (mesh done, solver re-run pending): `addLayers true`
+   is now enabled in `system/snappyHexMeshDict` (see the Mesh bullet and
+   images above). What remains is re-running `simpleFoam` on this layered
+   mesh and checking whether `nozzleWall` now sits consistently above y+ =
+   30 (or moving to a low-Re wall treatment targeting y+ ~ 1), so wall
+   shear stress can be trusted quantitatively. The results and known
+   limitations below are still from the pre-layer mesh.
 2. **Transient solver**: re-run with `pimpleFoam` to capture the unsteady
    shear-layer / vortex-shedding behaviour downstream of the sudden
    expansion directly, instead of relying on a steady RANS plateau.
