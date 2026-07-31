@@ -15,8 +15,8 @@ FoamFile
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 // Coarse first-pass mesh: castellate + snap + boundary layers on nozzleWall,
-// sized to target y+ ~ 30 at the throat (highest wall shear, smallest local
-// medial-axis distance -- see addLayersControls below).
+// sized to a low-Re target of y+ ~ 1 at the throat (highest wall shear,
+// smallest local medial-axis distance -- see addLayersControls below).
 castellatedMesh true;
 snap            true;
 addLayers       true;
@@ -90,26 +90,36 @@ addLayersControls
     {
         nozzleWall
         {
-            nSurfaceLayers 3;
+            nSurfaceLayers 12;
         }
     }
 
-    // Sized off the throat: local surface cell size there is ~1 mm (background
-    // 2 mm, refinement level 1), and the throat friction velocity at throat
-    // Re = 6500 (see 0/U) gives y+ = 30 at ~0.28 mm wall distance. So a first
-    // layer at 0.3x the local cell size lands right at y+ ~ 30 in the throat.
-    // Kept to 3 layers (not more) because the throat is only 4 mm in
-    // diameter -- maxThicknessToMedialRatio below caps total layer stack at
-    // 30% of local wall-to-centerline distance (~0.6 mm at the throat), so a
-    // taller stack would just get squeezed back down by snappyHexMesh anyway.
-    // Away from the throat (larger pipe, lower shear) the same absolute
-    // first-layer thickness gives a smaller y+ -- that's expected and
-    // checked in the next step, not something this mesh alone can fix
-    // everywhere given the flow separation downstream of the sudden
-    // expansion.
-    firstLayerThickness    0.3;
+    // Switched from a y+~30 wall-function target (Step 2 measured avg y+
+    // 4.51, max 24.5 with that sizing -- undershooting 30 everywhere, and
+    // dropping to viscous-sublayer levels away from the throat) to a
+    // low-Re target of y+ ~ 1 at the throat instead. Rationale: the same
+    // relative first-layer thickness gives a *smaller* y+ away from the
+    // throat (lower shear), so "y+ in [30,300] everywhere" is a two-sided
+    // target this geometry's shear range can't satisfy, while "y+ <~ 1-5
+    // everywhere" is one-sided and only gets easier to satisfy away from
+    // the throat.
+    //
+    // Local surface cell size at the throat is ~1 mm (background 2 mm,
+    // refinement level 1, uniform across nozzleWall -- see
+    // castellatedMeshControls above). Throat friction velocity (same
+    // Blasius-type correlation used for the y+~30 estimate this replaces)
+    // gives u_tau ~ 0.355 m/s at throat Re = 6500 (see 0/U), so
+    // y+ = 1 at y = nu/u_tau = 3.314394e-06/0.355 ~ 0.0093 mm. A first
+    // layer at 0.01x the local cell size (~0.01 mm) lands right at
+    // y+ ~ 1 in the throat.
+    // 12 layers at expansionRatio 1.2 sums to ~0.0093 mm * (1.2^12-1)/0.2
+    // ~ 0.4 mm total stack, comfortably under the ~0.6 mm
+    // maxThicknessToMedialRatio cap at the throat (see below) with margin
+    // for snappyHexMesh's usual under-delivery (Step 1 achieved ~88% of
+    // nominal thickness).
+    firstLayerThickness    0.01;
     expansionRatio          1.2;
-    minThickness            0.1;
+    minThickness            0.005;
     nGrow                   0;
     featureAngle            60;
     slipFeatureAngle        30;

@@ -78,14 +78,18 @@ plots/           Generated plots comparing CFD results against experimental
 
 Mesh, boundary conditions, and a first solver run are in place:
 
-- **Mesh**: coarse `blockMesh` background + `snappyHexMesh` (castellate,
-  snap, and boundary layers on `nozzleWall`) around
-  `constant/triSurface/fda_nozzle_wall.stl`. 19944 cells. `checkMesh`
-  reports `Mesh OK` (max non-orthogonality 45.7°, max skewness 1.04, max
-  aspect ratio 11.7). Boundary layers: 3 target layers on `nozzleWall`,
-  sized off the throat (`system/snappyHexMeshDict`); snappyHexMesh achieved
-  96% face coverage, avg 2.79 layers, 88% of target thickness (the throat's
-  4 mm diameter caps how thick a layer stack fits there).
+- **Mesh**: coarse `blockMesh` background (8100 cells) + `snappyHexMesh`
+  (castellate, snap, and boundary layers on `nozzleWall`) around
+  `constant/triSurface/fda_nozzle_wall.stl`. 43288 cells. `checkMesh`
+  reports `Mesh OK` (max non-orthogonality 43.8°, max skewness 1.04, max
+  aspect ratio 100.6 — high, but expected for the very thin near-wall
+  cells a low-Re layer stack needs; not flagged as an error). Boundary
+  layers: 12 target layers on `nozzleWall`, sized off the throat for a
+  **low-Re target of y+ ~ 1** (`system/snappyHexMeshDict`; see "Why y+ ~ 1
+  instead of y+ ~ 30" below for the reasoning); snappyHexMesh achieved
+  82.3% face coverage, avg 8.51 of 12 layers, 77.7% of target thickness
+  (the throat's 4 mm diameter caps how thick a layer stack fits there via
+  `maxThicknessToMedialRatio`).
 
 ![Nozzle mesh overview](plots/mesh_overview.png)
 ![Boundary-layer mesh at the throat](plots/mesh_throat_boundary_layers.png)
@@ -115,50 +119,94 @@ recovery downstream:
 magnitude, shown over the wall outline:
 ![Streamlines colored by velocity magnitude](plots/streamlines_velocity.png)
 
-**y+ on `nozzleWall`** — see the known limitation below (no boundary layers
-yet, so most of the wall sits below y+ = 30):
+**y+ on `nozzleWall`** — now consistently low (viscous-sublayer / low-Re
+regime) across most of the wall, with a tail near the throat still above
+the wall-function switch point (see below):
 ![y+ on nozzleWall](plots/yplus_nozzle_wall.png)
+
+### Why y+ ~ 1 instead of y+ ~ 30
+
+Two boundary-layer meshes were tried, in order:
+
+1. **No boundary layers** (original mesh, 8100 cells): y+ on `nozzleWall`
+   averaged ~11.5 (min 0.78, max 47.7).
+2. **3 layers targeting y+ ~ 30 at the throat** (19944 cells): re-running
+   `simpleFoam` on this mesh made y+ *worse*, not better — avg 4.51 (min
+   0.16, max 24.5). Root cause: `snappyHexMesh`'s `firstLayerThickness` was
+   one relative value, sized off the throat's shear (the highest on the
+   wall). Away from the throat, in the lower-shear diffuser/expansion
+   region, the same relative layer thickness produces a *smaller* y+
+   (y+ is proportional to local friction velocity, which varies by more
+   than an order of magnitude along the wall). A target window like y+ in
+   [30, 300] is two-sided, so one relative sizing
+   picked to hit it at the throat cannot also hit it everywhere else —
+   it undershoots increasingly as shear drops. The throat's narrow 4 mm
+   diameter compounded this: `maxThicknessToMedialRatio` capped the layer
+   stack there too, so even the throat came in under the y+ = 30 target
+   (max measured 24.5, only 3 layers at 88% of nominal thickness).
+3. **12 layers targeting y+ ~ 1 at the throat** (current mesh, 43288
+   cells): avg y+ dropped to 2.50, **median 0.20** — verified by
+   independently summing the raw `nozzleWall` y+ field (4080 boundary
+   faces) and matching `postProcess`'s reported min/max/average exactly.
+   A low-Re target is one-sided (`y+ <~ 1-5` is "thin enough", with no
+   upper-shear-dependent floor), so it gets *easier* to satisfy away from
+   the throat instead of harder — the same shear variation that broke
+   attempt 2 now works in its favour. A tail remains: ~15% of wall faces
+   (640/4080) still exceed y+ = 5, 90th percentile 11.1, max 31.1 —
+   concentrated at the throat, where the same medial-axis constraint from
+   attempt 2 still limits how thin the layer stack can get.
+
+This is corroborated by the wall function implementation itself, checked
+directly against the OpenFOAM v2312 source
+(`nutkWallFunctionFvPatchScalarField.C`): `nutkWallFunction` computes y+
+per face and switches formula at `yPlusLam` (≈ 11, from the fixed point of
+`log(E·y+)/kappa` with the default `kappa = 0.41`, `E = 9.8`) — using the
+molecular-viscosity (laminar sublayer) value below that threshold and the
+log-law value above it. Attempt 2's y+ values (0.16–24.5, straddling 11 on
+both sides across the wall) meant many faces sat in the region where
+*neither* assumption is a good approximation of the real (buffer-layer)
+velocity profile. Attempt 3's median of 0.20 means the large majority of
+`nozzleWall` now lands solidly on the laminar-sublayer branch, which is
+the physically correct treatment once the mesh actually resolves that
+layer — consistent with residual behaviour also improving markedly
+(`bounding omega` events dropped from ~1000/1000 timesteps to 11/1000).
+The throat tail (~15% of faces, still straddling the 11 switch point) is
+the one part of the wall where this isn't fully resolved yet.
 
 ### Known limitations of this run (not yet resolved)
 
 - **Residuals did not fully converge.** `U` residuals drop quickly early on
-  then plateau around ~0.05 instead of continuing down to the
-  `residualControl` targets in `system/fvSolution`, with intermittent
-  "bounding k" events. This is consistent with a known feature of the FDA
-  nozzle benchmark at this Reynolds number reported in the literature: the
-  shear layer downstream of the sudden expansion sheds vortices and is
-  inherently unsteady, which a steady-state RANS solver cannot fully settle
-  into a single fixed point. It is not necessarily a sign of a mesh or
-  boundary-condition error.
-- **y+ on `nozzleWall` averages ~11.5** (min 0.78, max 47.7) — because no
-  boundary layers have been added yet (`snappyHexMeshDict` has
-  `addLayers false`), much of the wall sits in the buffer region rather
-  than solidly above y+ = 30, where the wall functions (`kqRWallFunction`,
-  `omegaWallFunction`, `nutkWallFunction`) are formally valid.
-- **Practical consequence**: wall shear stress from this run should be
-  treated as **indicative only, not quantitatively validated** — this
-  matters directly for `hemolysis-calculator`, which consumes shear stress
-  as its primary input. Do not feed this run's shear stress into the
-  haemolysis model as a validated result yet.
+  then plateau (not down to the `residualControl` targets in
+  `system/fvSolution`), with frequent "bounding k" events (830/1000
+  timesteps on the current mesh). This is consistent with a known feature
+  of the FDA nozzle benchmark at this Reynolds number reported in the
+  literature: the shear layer downstream of the sudden expansion sheds
+  vortices and is inherently unsteady, which a steady-state RANS solver
+  cannot fully settle into a single fixed point. It is not necessarily a
+  sign of a mesh or boundary-condition error.
+- **y+ still has a throat-region tail above the wall-function switch
+  point** (see above) — ~15% of `nozzleWall` faces exceed y+ = 5, up to
+  31.1 at the throat, where the medial-axis constraint on the 4 mm throat
+  limits how thin the layer stack can get.
+- **Practical consequence**: wall shear stress from this run is much
+  better supported than the earlier attempts, but the throat — the
+  highest-shear region and the one most relevant to `hemolysis-calculator`
+  — is exactly where the residual y+ tail sits. Treat shear stress
+  elsewhere on the wall as trustworthy; treat the throat value with some
+  caution until that tail is tightened further or the transient run (next
+  steps) corroborates it.
 
 ### Next steps
 
-1. **Boundary layers** (mesh done, solver re-run pending): `addLayers true`
-   is now enabled in `system/snappyHexMeshDict` (see the Mesh bullet and
-   images above). What remains is re-running `simpleFoam` on this layered
-   mesh and checking whether `nozzleWall` now sits consistently above y+ =
-   30 (or moving to a low-Re wall treatment targeting y+ ~ 1), so wall
-   shear stress can be trusted quantitatively. The results and known
-   limitations below are still from the pre-layer mesh.
-2. **Transient solver**: re-run with `pimpleFoam` to capture the unsteady
+1. **Transient solver**: re-run with `pimpleFoam` to capture the unsteady
    shear-layer / vortex-shedding behaviour downstream of the sudden
    expansion directly, instead of relying on a steady RANS plateau.
-3. **`hemolysis-calculator` hand-off**: once (1) and (2) give a
-   quantitatively trustworthy shear stress field, add an export step that
-   writes velocity + shear stress history along streamlines in the format
-   `hemolysis-calculator` expects, and wire it into that project's
+2. **`hemolysis-calculator` hand-off**: once the transient run corroborates
+   the shear stress field (including at the throat), add an export step
+   that writes velocity + shear stress history along streamlines in the
+   format `hemolysis-calculator` expects, and wire it into that project's
    haemolysis model as validated input.
-4. **Post-processing script**: add the script (populating `postprocessing/`
+3. **Post-processing script**: add the script (populating `postprocessing/`
    and `plots/`) that extracts velocity profiles at the benchmark's PIV
    measurement planes and plots them against the published experimental
    data, closing the loop described in "Purpose" above.
