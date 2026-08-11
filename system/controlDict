@@ -14,24 +14,44 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-// Solver not selected yet -- this controlDict only needs to be valid enough
-// for blockMesh / snappyHexMesh / checkMesh to run. Update "application"
-// once the solver (steady RANS vs. LES/transitional) is decided.
-application     simpleFoam;
+// Step 3: pimpleFoam transient run, restarted from the converged Step 2
+// simpleFoam steady state (1000/) so the URANS run starts from a
+// realistic developed base flow instead of t=0 uniform conditions.
+application     pimpleFoam;
 
-startFrom       startTime;
+startFrom       latestTime;
 
 startTime       0;
 
 stopAt          endTime;
 
-endTime         1000;
+// simpleFoam's "time" is really an iteration counter (1..1000, deltaT 1),
+// not seconds -- startFrom latestTime picks up fields from 1000/, so
+// endTime has to be offset from there (1000 + duration) or pimpleFoam
+// sees startTime(1000) > endTime and exits after zero timesteps.
+// Duration 0.15 s is sized against the outlet-stub flow-through time
+// (L_OUTLET_STUB / U_inlet = 0.080 / 0.598432 = 0.1337 s) so the run
+// covers roughly one full pass of the sudden-expansion shear layer
+// through the downstream stub.
+endTime         1000.15;
 
-deltaT          1;
+// Fixed deltaT, NOT Co-adjusted -- see README "Why a fixed timestep
+// instead of adjustTimeStep" for the reasoning: the 12-layer boundary
+// mesh has near-wall throat cells (~15 um) that give Courant numbers in
+// the thousands at any deltaT big enough to be useful, even though
+// pimpleFoam's implicit Euler handling is unconditionally stable there
+// (that outlier just gets extra numerical diffusion locally, which is
+// acceptable since Step 3 cares about time-accuracy in the downstream
+// shear layer, not the throat sublayer). Letting global-max-Co drive
+// adjustTimeStep would collapse deltaT to ~1e-10 s and make the run
+// infeasible. Instead deltaT is picked by hand for Co ~ 1 on the
+// downstream shear-layer cell scale (~0.5 mm) at the post-expansion jet
+// velocity (~5.4 m/s): dt = 0.5e-3 / 5.4 ~ 9e-5 s.
+adjustTimeStep  no;
+deltaT          1e-4;
 
 writeControl    timeStep;
-
-writeInterval   100;
+writeInterval   25;
 
 purgeWrite      0;
 
@@ -46,6 +66,28 @@ timeFormat      general;
 timePrecision   6;
 
 runTimeModifiable true;
+
+// Point probes in the shear layer downstream of the sudden expansion
+// (z = 0.082685 m), to give a time history for spotting shedding
+// oscillations without needing to inspect every written volume field.
+functions
+{
+    shearLayerProbes
+    {
+        type            probes;
+        libs            (sampling);
+        writeControl    timeStep;
+        writeInterval   1;
+        fields          (U p);
+        probeLocations
+        (
+            (0.003 0 0.092685)   // 10 mm downstream of expansion, r=3mm
+            (0.003 0 0.112685)   // 30 mm downstream
+            (0.003 0 0.142685)   // 60 mm downstream
+            (0     0 0.112685)   // centerline, 30 mm downstream
+        );
+    }
+}
 
 
 // ************************************************************************* //

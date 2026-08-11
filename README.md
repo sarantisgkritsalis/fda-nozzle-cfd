@@ -100,7 +100,9 @@ Mesh, boundary conditions, and a first solver run are in place:
   `simpleFoam` + kOmegaSST (`constant/turbulenceProperties`). Inlet/outlet
   velocities derived from Re via mass conservation
   (U_throat = 5.386 m/s, U_inlet = 0.598 m/s); see the comments in `0/U`,
-  `0/k`, `0/omega` for the exact derivation.
+  `0/k`, `0/omega` for the exact derivation. A transient `pimpleFoam`
+  continuation (0.15 s) is also available, restarted from the steady
+  state — see "Transient (`pimpleFoam`) run" below.
 
 ### Results (t=1000, throat Re=6500)
 
@@ -196,11 +198,54 @@ the one part of the wall where this isn't fully resolved yet.
   caution until that tail is tightened further or the transient run (next
   steps) corroborates it.
 
+### Transient (`pimpleFoam`) run
+
+Restarted from the converged Step 2 steady state (`1000/`): `application`
+switched to `pimpleFoam`, `ddtSchemes` to `Euler`, `PIMPLE` block added
+with `nOuterCorrectors 1` (PISO-equivalent — one momentum-predictor +
+2-corrector pressure loop per timestep). Ran 0.15 s of simulated time,
+sized against the outlet-stub flow-through time
+(`L_OUTLET_STUB / U_inlet = 0.080 / 0.598432 = 0.1337 s`).
+
+**Fixed `deltaT = 1e-4 s`, not Co-adjusted.** `adjustTimeStep` was tried
+first; the global max Courant number is dominated by the ~15 um
+first-layer cells at the throat (Co in the thousands even at
+deltaT ~1e-7 s), which would collapse the adaptive timestep to ~1e-10 s
+and make the run infeasible. pimpleFoam's implicit Euler handling is
+unconditionally stable there — that outlier cell just picks up extra
+numerical diffusion locally, which is acceptable since the throat's
+sublayer isn't the region Step 3 cares about resolving time-accurately —
+so `deltaT` was instead picked by hand for Co ~ 1 on the downstream
+shear-layer cell scale (~0.5 mm) at the post-expansion jet velocity
+(~5.4 m/s). Confirmed stable in practice: max Co stayed ~0.8 for the
+full 1500-step run, residuals bounded throughout, no NaN/divergence.
+1500 timesteps, `ExecutionTime` 841 s (~14 min, serial, 1 core).
+
+**Findings**: point probes in the shear layer downstream of the sudden
+expansion (`shearLayerProbes` in `system/controlDict`, data under
+`postProcessing/shearLayerProbes/`) show real time-dependent behaviour,
+not a frozen steady field — e.g. the centerline probe 30 mm downstream of
+the expansion rises from 3.26 m/s to a peak of 3.43 m/s at t=0.05 s, then
+falls to 2.63 m/s by t=0.15 s (a ~23% swing). That's consistent with a
+large-scale coherent structure (shear-layer roll-up / shed vortex)
+convecting past the probe — exactly the behaviour a steady solver can't
+represent.
+
+**Not a clean pass**: 0.15 s only captures roughly half of what looks
+like one oscillation cycle — not enough to measure a shedding frequency
+or confirm periodicity. Resolving that would need a run several times
+longer (multiple outlet-stub flow-throughs), which at the current
+per-step cost (~0.56 s/timestep serial) is a multi-hour run. Treat this
+result as confirmation that pimpleFoam produces genuine unsteady content
+here (motivating the move away from steady RANS), not as a validated
+shedding-frequency measurement.
+
 ### Next steps
 
-1. **Transient solver**: re-run with `pimpleFoam` to capture the unsteady
-   shear-layer / vortex-shedding behaviour downstream of the sudden
-   expansion directly, instead of relying on a steady RANS plateau.
+1. **Extend the transient run**: continue `pimpleFoam` for several more
+   outlet-stub flow-throughs to confirm periodicity and measure a
+   shedding frequency/Strouhal number, rather than the single partial
+   cycle captured so far.
 2. **`hemolysis-calculator` hand-off**: once the transient run corroborates
    the shear stress field (including at the throat), add an export step
    that writes velocity + shear stress history along streamlines in the
