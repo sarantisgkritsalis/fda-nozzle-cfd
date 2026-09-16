@@ -104,6 +104,36 @@ Mesh, boundary conditions, and a first solver run are in place:
   continuation (0.15 s) is also available, restarted from the steady
   state — see "Transient (`pimpleFoam`) run" below.
 
+### Summary: did y+ improve, and did the transient run converge better?
+
+Short answer to both: yes, substantially, but neither is a clean pass —
+see the linked sections for the full reasoning and remaining caveats.
+
+- **Did y+ improve?** Yes. No-layer baseline averaged y+ ~11.5 on
+  `nozzleWall`; the current 12-layer, low-Re-targeted mesh gets
+  avg 2.50 / median 0.20, with the large majority of the wall now
+  correctly resolving the viscous sublayer instead of straddling the
+  wall-function switch point. Not fully resolved: ~15% of faces, all in
+  the medial-axis-constrained throat, still exceed y+ = 5 (up to 31.1).
+  Full reasoning in "Why y+ ~ 1 instead of y+ ~ 30" below.
+- **Did the transient run converge better?** By one concrete measure,
+  yes: `kOmegaSST`'s turbulence-quantity clipping ("bounding k" /
+  "bounding omega" — the solver clamping a value back into its physical
+  range after the linear solve pushed it negative) fired on 830/1000
+  steady-state iterations and 11/1000 for omega; the transient run only
+  needed it on 42/1500 timesteps for k and 0/1500 for omega. That's
+  consistent with the steady solver being asked to force an inherently
+  unsteady flow (the shear layer downstream of the sudden expansion)
+  into a single fixed point, which the transient run doesn't need to do.
+  Caveat: this isn't an apples-to-apples "convergence" comparison — the
+  transient run solves a much smaller linear system to a tight tolerance
+  every 1e-4 s rather than iterating toward a global steady residual
+  target, so fewer clipping events per-step is expected structurally, not
+  just physically. The transient run's own limitation is different: it's
+  too short (0.15 s, ~half an oscillation cycle at the shear-layer probes)
+  to confirm periodicity or extract a shedding frequency. Full reasoning
+  in "Transient (`pimpleFoam`) run" below.
+
 ### Results (t=1000, throat Re=6500)
 
 Rendered with `scripts/render_cfd_results.py` (pvpython); regenerate after
