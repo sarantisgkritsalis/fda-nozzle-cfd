@@ -270,17 +270,75 @@ result as confirmation that pimpleFoam produces genuine unsteady content
 here (motivating the move away from steady RANS), not as a validated
 shedding-frequency measurement.
 
+### Shear stress export for `hemolysis-calculator` hand-off
+
+`scripts/export_wall_shear_stress.py` (pvpython) reads the `wallShearStress`
+and `yPlus` fields on `nozzleWall` — generate them first if missing, e.g.
+`simpleFoam -postProcess -func wallShearStress -time 1000` and
+`-func yPlus -time 1000` (`pimpleFoam` for `1000.15`) — and writes two CSVs
+to `postprocessing/` (gitignored, like all OpenFOAM run output in this
+repo — regenerate locally with `pvpython scripts/export_wall_shear_stress.py`
+rather than pulling them from git):
+
+- `wall_shear_stress_full.csv`: every `nozzleWall` face, at both the
+  steady (`1000`) and transient-latest (`1000.15`) times, with position,
+  **dynamic** shear stress in Pa, y+, and a per-face `confidence` flag
+  (`validated` if y+ ≤ 5, `low_confidence_throat_tail` otherwise — the
+  same threshold used in "Why y+ ~ 1 instead of y+ ~ 30" above).
+- `hemolysis_calculator_input.csv`: a point-estimate summary in the
+  `(shear_stress_pa, exposure_time_s)` scalar format
+  `hemolysis-calculator`'s single-exposure power-law model actually
+  consumes — checked directly against that project's README/schema, it
+  does not ingest full fields or streamlines, only two scalars per
+  sample, matching its `data/reference_data.csv` columns
+  (`sample_id, shear_stress_pa, exposure_time_s, hi_measured_percent`).
+
+Two things worth calling out, since the earlier "Next steps" plan (below)
+originally assumed the hand-off should wait on a longer transient run:
+
+- **wallShearStress from an incompressible solver is kinematic**
+  (m²/s², not Pa) — a well-known OpenFOAM gotcha. The export converts to
+  dynamic shear stress by multiplying by `rho = 1056 kg/m^3`
+  (`constant/transportProperties`), which is why that file records `rho`
+  even though the incompressible solvers themselves never use it.
+- **Extending the transient run would not have fixed the actual gate.**
+  The throat y+ tail (~15% of faces, up to 31.1) is a *mesh resolution*
+  problem (`maxThicknessToMedialRatio` capping layer thickness at the
+  4 mm throat — Steps 1–2), not a *transient-duration* problem (Step 3);
+  running `pimpleFoam` longer confirms shear-layer periodicity downstream
+  but does nothing for the throat's spatial resolution. So rather than
+  wait on a multi-hour run that wouldn't have resolved the underlying
+  issue, the export instead flags low-confidence faces per-point (not a
+  hard exclusion — the throat is also the highest-shear,
+  most hemolysis-relevant region, so dropping it entirely would make the
+  export useless for its actual purpose) and reports both a validated
+  and an overall-peak point estimate.
+- **Result, from the `1000.15` transient snapshot**: peak dynamic wall
+  shear stress is 165.73 Pa, at y+ = 2.79 — i.e. the true peak-shear face
+  itself lands in the *validated* (y+ ≤ 5) region, not the low-confidence
+  throat tail (3436/4080 faces validated, 644/4080 flagged
+  low-confidence, none of which reach the overall peak). Exposure time is
+  reported as the throat transit time, `L_throat / U_throat = 0.040 /
+  5.386 = 7.427 ms` — an order-of-magnitude single-exposure estimate for
+  the peak-shear region, matching the granularity
+  `hemolysis-calculator`'s point-estimate mode uses; it is **not** a
+  Lagrangian residence time, since no streamline integration exists in
+  this repo yet (see "Next steps" #1 below).
+
 ### Next steps
 
-1. **Extend the transient run**: continue `pimpleFoam` for several more
+1. **Lower the throat y+ tail**: the ~15% of `nozzleWall` faces still
+   above y+ = 5 are concentrated at the throat, where
+   `maxThicknessToMedialRatio` caps boundary-layer thickness given the
+   4 mm diameter. Would need a different meshing strategy there (e.g.
+   locally finer background mesh before layer addition) rather than more
+   solver iterations or a longer transient run.
+2. **Extend the transient run**: continue `pimpleFoam` for several more
    outlet-stub flow-throughs to confirm periodicity and measure a
    shedding frequency/Strouhal number, rather than the single partial
-   cycle captured so far.
-2. **`hemolysis-calculator` hand-off**: once the transient run corroborates
-   the shear stress field (including at the throat), add an export step
-   that writes velocity + shear stress history along streamlines in the
-   format `hemolysis-calculator` expects, and wire it into that project's
-   haemolysis model as validated input.
+   cycle captured so far. Also a prerequisite for a true Lagrangian
+   exposure-time estimate (streamline/particle-track integration) instead
+   of the throat-transit-time approximation used above.
 3. **Post-processing script**: add the script (populating `postprocessing/`
    and `plots/`) that extracts velocity profiles at the benchmark's PIV
    measurement planes and plots them against the published experimental
